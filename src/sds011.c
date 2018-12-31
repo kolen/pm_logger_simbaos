@@ -40,6 +40,11 @@ const char sds_command_query_data[15] = {
 
 #define SDS011_COMMAND_REPORTING_MODE 0xb4
 
+struct command_reply_t {
+  char command;
+  char data[6];
+};
+
 char sds011_command_checksum(const char *data, size_t data_length)
 {
   size_t i;
@@ -65,7 +70,7 @@ void sds011_send_command(struct uart_soft_driver_t *uart, char command, const ch
 }
 
 // data is 6 bytes
-int sds011_read_command(struct uart_soft_driver_t *uart, char *command, char *data)
+int sds011_read_reply(struct uart_soft_driver_t *uart, struct command_reply_t *reply)
 {
   char command_buffer[9];
   do {
@@ -75,8 +80,8 @@ int sds011_read_command(struct uart_soft_driver_t *uart, char *command, char *da
 
   char checksum = sds011_command_checksum(&command_buffer[1], 6);
   if (checksum == command_buffer[7] && command_buffer[8] == SDS011_COMMAND_TAIL) {
-    memcpy(&command_buffer[1], &data, 6);
-    *command = command_buffer[0];
+    memcpy(&command_buffer[1], &(reply->data), 6);
+    reply->command = command_buffer[0];
     return TRUE;
   } else {
     return FALSE;
@@ -125,10 +130,9 @@ void* sds011_main(void* _unused)
     thrd_sleep(3);
     sds011_query_data(&uart);
     thrd_sleep_ms(100);
-    char command;
-    char data[6];
+    struct command_reply_t reply;
     int result;
-    result = sds011_read_command(&uart, &command, data);
+    result = sds011_read_reply(&uart, &reply);
 
     if (!result) {
       log_object_print(&sds011_log, LOG_INFO, OSTR("Error reading packet."));
