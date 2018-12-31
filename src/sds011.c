@@ -17,6 +17,8 @@ char uart_receive_buffer[UART_RECEIVE_BUFFER_SIZE];
 #define SDS011_COMMAND_TAIL 0xab
 #define SDS011_COMMAND_QUERY_DATA 0xb4
 
+#define SDS011_REPLY_MEASUREMENT 0xc0
+
 const char sds_command_head = SDS011_COMMAND_HEAD;
 const char sds_command_tail = SDS011_COMMAND_TAIL;
 
@@ -45,6 +47,11 @@ const char sds_command_query_data[15] = {
 struct sds011_command_reply_t {
   char command;
   char data[6];
+};
+
+struct sds011_measurement {
+  int pm2_5;
+  int pm10;
 };
 
 char sds011_command_checksum(const char *data, size_t data_length)
@@ -106,6 +113,13 @@ void sds011_query_data(struct uart_soft_driver_t *uart)
 		      sizeof(sds_command_query_data));
 }
 
+void sds011_decode_measurement_reply(const struct sds011_command_reply_t *reply,
+				     struct sds011_measurement *measurement)
+{
+  measurement->pm2_5 = reply->data[0] | (reply->data[1] << 8);
+  measurement->pm10  = reply->data[2] | (reply->data[3] << 8);
+}
+
 void* sds011_main(void* _unused)
 {
   log_object_init(&sds011_log, "sds011", LOG_UPTO(INFO));
@@ -127,6 +141,7 @@ void* sds011_main(void* _unused)
   char hex_buf[4 + 3 * 6 + 2];
   char *hex_buf_cur;
   int i;
+  struct sds011_measurement measurement;
 
   while(1) {
     thrd_sleep(3);
@@ -141,13 +156,22 @@ void* sds011_main(void* _unused)
       continue;
     }
 
-    std_snprintf(hex_buf, 5, "%02x: ", (unsigned char)command);
+    std_snprintf(hex_buf, 5, "%02x: ", (unsigned char)reply.command);
     hex_buf_cur = hex_buf + 4;
     for(i=0; i<6; i++) {
-      std_snprintf(hex_buf_cur, 3, "%02x ", (unsigned char)data[i]);
+      std_snprintf(hex_buf_cur, 3, "%02x ", (unsigned char)reply.data[i]);
       hex_buf_cur += 3;
     }
     std_snprintf(hex_buf_cur, 5, "\n");
     log_object_print(&sds011_log, LOG_INFO, hex_buf);
+
+    if (reply.command == SDS011_REPLY_MEASUREMENT) {
+      sds011_decode_measurement_reply(&reply, &measurement);
+      log_object_print(&sds011_log,
+		       LOG_INFO,
+		       OSTR("PM 2.5: %5.1f, PM 10: %5.1f"),
+		       measurement.pm2_5 / 10.0,
+		       measurement.pm10 / 10.0);
+    }
   }
 }
