@@ -42,7 +42,7 @@ const char sds_command_query_data[15] = {
 
 #define SDS011_COMMAND_REPORTING_MODE 0xb4
 
-struct command_reply_t {
+struct sds011_command_reply_t {
   char command;
   char data[6];
 };
@@ -72,7 +72,7 @@ void sds011_send_command(struct uart_soft_driver_t *uart, char command, const ch
 }
 
 // data is 6 bytes
-int sds011_read_reply(struct uart_soft_driver_t *uart, struct command_reply_t *reply)
+int sds011_read_reply(struct uart_soft_driver_t *uart, struct sds011_command_reply_t *reply)
 {
   char command_buffer[9];
   do {
@@ -132,7 +132,7 @@ void* sds011_main(void* _unused)
     thrd_sleep(3);
     sds011_query_data(&uart);
     thrd_sleep_ms(100);
-    struct command_reply_t reply;
+    struct sds011_command_reply_t reply;
     int result;
     result = sds011_read_reply(&uart, &reply);
 
