@@ -69,7 +69,7 @@ int sds011_read_command(struct uart_soft_driver_t *uart, char *command, char *da
   do {
     uart_soft_read(uart, &command_buffer, 1);
   } while (command_buffer[0] != SDS011_COMMAND_HEAD);
-  uart_soft_read(uart, &command_buffer, 8);
+  uart_soft_read(uart, &command_buffer, 9);
 
   char checksum = sds011_command_checksum(&command_buffer[1], 6);
   if (checksum == command_buffer[7] && command_buffer[8] == SDS011_COMMAND_TAIL) {
