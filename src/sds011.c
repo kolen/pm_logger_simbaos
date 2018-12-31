@@ -1,3 +1,5 @@
+// See 'Laser Dust Sensor Control Protocol V1.3 Nova Fitness Co.,Ltd.'
+
 #include <stddef.h>
 #include "boards_exti.h"
 #include "simba.h"
