@@ -18,6 +18,8 @@ char uart_receive_buffer[UART_RECEIVE_BUFFER_SIZE];
 const char sds_command_head = SDS011_COMMAND_HEAD;
 const char sds_command_tail = SDS011_COMMAND_TAIL;
 
+struct log_object_t sds011_log;
+
 const char sds_command_data_get_reporting_mode[15] = {
   0x02, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -97,16 +99,10 @@ void sds011_query_data(struct uart_soft_driver_t *uart)
 		      sizeof(sds_command_query_data));
 }
 
-struct uart_driver_t main_uart;
-char main_uart_rxbuf[16];
-
 void* sds011_main(void* _unused)
 {
-  uart_module_init(); // TODO: maybe unnecessary
-  uart_init(&main_uart, &uart_device[0], 9600, &main_uart_rxbuf, 16);
-
-  char test[] = "Test\n";
-  uart_write(&main_uart, test, sizeof(test));
+  log_object_init(&sds011_log, "sds011", LOG_UPTO(INFO));
+  log_object_print(&sds011_log, LOG_INFO, OSTR("Starting sds011 module"));
 
   exti_module_init();
   uart_soft_init(&uart,
@@ -121,7 +117,8 @@ void* sds011_main(void* _unused)
   sds011_get_reporting_mode(&uart);
   thrd_sleep(1);
 
-  char hex_buf[5];
+  char hex_buf[4 + 3 * 6 + 2];
+  char *hex_buf_cur;
   int i;
 
   while(1) {
@@ -130,15 +127,21 @@ void* sds011_main(void* _unused)
     thrd_sleep_ms(100);
     char command;
     char data[6];
-    sds011_read_command(&uart, &command, data);
+    int result;
+    result = sds011_read_command(&uart, &command, data);
 
-    std_snprintf(hex_buf, 5, "%x: ", command);
-    uart_write(&main_uart, hex_buf, std_strlen(hex_buf));
-    for(i=0; i<6; i++) {
-      std_snprintf(hex_buf, 5, "%x ", data[i]);
-      uart_write(&main_uart, hex_buf, std_strlen(hex_buf));
+    if (!result) {
+      log_object_print(&sds011_log, LOG_INFO, OSTR("Error reading packet."));
+      continue;
     }
-    std_snprintf(hex_buf, 5, "\n");
-    uart_write(&main_uart, hex_buf, std_strlen(hex_buf));
+
+    std_snprintf(hex_buf, 5, "%02x: ", (unsigned char)command);
+    hex_buf_cur = hex_buf + 4;
+    for(i=0; i<6; i++) {
+      std_snprintf(hex_buf_cur, 3, "%02x ", (unsigned char)data[i]);
+      hex_buf_cur += 3;
+    }
+    std_snprintf(hex_buf_cur, 5, "\n");
+    log_object_print(&sds011_log, LOG_INFO, hex_buf);
   }
 }
