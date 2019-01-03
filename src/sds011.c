@@ -180,3 +180,8 @@ void sds011_init_with_uart_soft(struct sds011_device_t *device, struct uart_soft
   device->chin = &(uart->chin);
   device->chout = &(uart->chout);
 }
+
+void sd011_set_query_device_id(struct sds011_device_t *device, sds011_device_id_t device_id)
+{
+  device->device_id = device_id;
+}
