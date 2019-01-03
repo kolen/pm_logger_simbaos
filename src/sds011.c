@@ -1,28 +1,22 @@
 // See 'Laser Dust Sensor Control Protocol V1.3 Nova Fitness Co.,Ltd.'
 
 #include <stddef.h>
-#include "boards_exti.h"
 #include "simba.h"
 #include "sds011.h"
 
-struct uart_soft_driver_t uart;
-struct exti_driver_t uart_exti;
-#define UART_RECEIVE_BUFFER_SIZE 256
-#define SDS_UART_RX_PIN pin_d5_dev
-#define SDS_UART_TX_PIN pin_d6_dev
-#define SDS_UART_RX_EXTI exti_d5_dev
-char uart_receive_buffer[UART_RECEIVE_BUFFER_SIZE];
+#define SDS011_REPLY_MEASUREMENT 0xc0
 
 #define SDS011_COMMAND_HEAD 0xaa
 #define SDS011_COMMAND_TAIL 0xab
-#define SDS011_COMMAND_QUERY_DATA 0xb4
 
-#define SDS011_REPLY_MEASUREMENT 0xc0
+// All outgoing commands have 'command' = 0xb4
+#define SDS011_COMMAND_OUTGOING 0xb4
+
+#define SDS011_COMMAND_INCOMING_CONFIG 0xc5
+#define SDS011_COMMAND_INCOMING_MEASUREMENT 0xc0
 
 const char sds_command_head = SDS011_COMMAND_HEAD;
 const char sds_command_tail = SDS011_COMMAND_TAIL;
-
-struct log_object_t sds011_log;
 
 const char sds_command_data_get_reporting_mode[15] = {
   0x02, 0x00,
@@ -42,52 +36,53 @@ const char sds_command_query_data[15] = {
   0xFF, 0xFF
 };
 
-#define SDS011_COMMAND_REPORTING_MODE 0xb4
+#define SDS011_COMMAND_REPORTING_MODE SDS011_COMMAND_OUTGOING
 
-struct sds011_command_reply_t {
+struct sds011_raw_command_reply_t {
   char command;
   char data[6];
 };
 
-struct sds011_measurement {
-  int pm2_5;
-  int pm10;
-};
-
-char sds011_command_checksum(const char *data, size_t data_length)
+int sds011_send_command(struct sds011_device_t *device, char command, const char *data, size_t data_length)
 {
-  size_t i;
-  const char *data_p = data;
+  char command_buf[19];
+  int data_i = 0, buf_i = 2;
   char checksum = 0;
-  for(i = 0; i < data_length; i++) {
-    checksum += *data_p;
-    data_p++;
+  command_buf[0] = SDS011_COMMAND_HEAD;
+  command_buf[1] = command;
+  while(data_i < data_length) {
+    command_buf[buf_i] = data[data_i];
+    checksum += data[data_i];
+    data_i++;
+    buf_i++;
   }
-  return checksum;
-}
-
-void sds011_send_command(struct uart_soft_driver_t *uart, char command, const char *data, size_t data_length)
-{
-  uart_soft_write(uart, &sds_command_head, 1);
-  uart_soft_write(uart, &command, 1);
-  uart_soft_write(uart, data, data_length);
-
-  char checksum = sds011_command_checksum(data, data_length);
-
-  uart_soft_write(uart, &checksum, 1);
-  uart_soft_write(uart, &sds_command_tail, 1);
+  checksum += (0xff + 0xff);
+  while(buf_i < 15) {
+    command_buf[buf_i] = 0;
+    buf_i++;
+  }
+  command_buf[15] = device->device_id && 0xff;
+  command_buf[16] = device->device_id && 0xff00 >> 8;
+  command_buf[17] = checksum;
+  command_buf[18] = SDS011_COMMAND_TAIL;
+  return chan_write(device->chout, command_buf, sizeof(command_buf));
 }
 
 // data is 6 bytes
-int sds011_read_reply(struct uart_soft_driver_t *uart, struct sds011_command_reply_t *reply)
+int sds011_read_raw(struct sds011_device_t *device, struct sds011_raw_command_reply_t *reply)
 {
   char command_buffer[9];
   do {
-    uart_soft_read(uart, &command_buffer, 1);
+    queue_read(device->chin, command_buffer, 1);
   } while (command_buffer[0] != SDS011_COMMAND_HEAD);
-  uart_soft_read(uart, &command_buffer, 9);
+  queue_read(device->chin, command_buffer, 9);
 
-  char checksum = sds011_command_checksum(&command_buffer[1], 6);
+  char checksum = 0;
+  int i;
+  for (i = 1; i < 7; i++) {
+    checksum += command_buffer[i];
+  }
+
   if (checksum == command_buffer[7] && command_buffer[8] == SDS011_COMMAND_TAIL) {
     memcpy(&command_buffer[1], &(reply->data), 6);
     reply->command = command_buffer[0];
@@ -97,81 +92,116 @@ int sds011_read_reply(struct uart_soft_driver_t *uart, struct sds011_command_rep
   }
 }
 
-void sds011_get_reporting_mode(struct uart_soft_driver_t *uart)
+int sds011_read_reply(struct sds011_device_t *device, struct sds011_reply_t *reply)
 {
-  sds011_send_command(uart,
-		      SDS011_COMMAND_REPORTING_MODE,
-		      sds_command_data_get_reporting_mode,
-		      sizeof(sds_command_data_get_reporting_mode));
-}
+  struct sds011_raw_command_reply_t raw_reply;
+  sds011_read_raw(device, &raw_reply);
 
-void sds011_query_data(struct uart_soft_driver_t *uart)
-{
-  sds011_send_command(uart,
-		      SDS011_COMMAND_QUERY_DATA,
-		      sds_command_query_data,
-		      sizeof(sds_command_query_data));
-}
-
-void sds011_decode_measurement_reply(const struct sds011_command_reply_t *reply,
-				     struct sds011_measurement *measurement)
-{
-  measurement->pm2_5 = reply->data[0] | (reply->data[1] << 8);
-  measurement->pm10  = reply->data[2] | (reply->data[3] << 8);
-}
-
-void* sds011_main(void* _unused)
-{
-  log_object_init(&sds011_log, "sds011", LOG_UPTO(INFO));
-  log_object_print(&sds011_log, LOG_INFO, OSTR("Starting sds011 module"));
-
-  exti_module_init();
-  uart_soft_init(&uart,
-		 &SDS_UART_TX_PIN,
-		 &SDS_UART_RX_PIN,
-		 &SDS_UART_RX_EXTI,
-		 9600,
-		 &uart_receive_buffer,
-		 UART_RECEIVE_BUFFER_SIZE);
-  sds011_get_reporting_mode(&uart);
-  thrd_sleep(1);
-  sds011_get_reporting_mode(&uart);
-  thrd_sleep(1);
-
-  char hex_buf[4 + 3 * 6 + 2];
-  char *hex_buf_cur;
-  int i;
-  struct sds011_measurement measurement;
-
-  while(1) {
-    thrd_sleep(3);
-    sds011_query_data(&uart);
-    thrd_sleep_ms(100);
-    struct sds011_command_reply_t reply;
-    int result;
-    result = sds011_read_reply(&uart, &reply);
-
-    if (!result) {
-      log_object_print(&sds011_log, LOG_INFO, OSTR("Error reading packet."));
-      continue;
+  switch(raw_reply.command) {
+  case 0xc0:
+    reply->type = sds011_reply_measurement;
+    reply->measurement.pm2_5 = raw_reply.data[0] | (raw_reply.data[1] << 8);
+    reply->measurement.pm10  = raw_reply.data[2] | (raw_reply.data[3] << 8);
+    break;
+  case 0xc5:
+    switch(raw_reply.data[0]) {
+    case 2:
+      reply->type = sds011_reply_data_reporting_mode;
+      reply->reporting_mode = raw_reply.data[2];
+      break;
+    case 5:
+      reply->type = sds011_reply_device_id;
+      break;
+    case 6:
+      reply->type = sds011_reply_sleep;
+      reply->awake = raw_reply.data[2];
+      break;
+    case 8:
+      reply->type = sds011_reply_working_period;
+      reply->sleep_minutes = raw_reply.data[2];
+      break;
+    case 7:
+      reply->type = sds011_reply_firmware_version;
+      reply->firmware_version[0] = raw_reply.data[1];
+      reply->firmware_version[1] = raw_reply.data[2];
+      reply->firmware_version[2] = raw_reply.data[3];
+      break;
+    default:
+      return -EPROTO;
     }
-
-    std_snprintf(hex_buf, 5, "%02x: ", (unsigned char)reply.command);
-    hex_buf_cur = hex_buf + 4;
-    for(i=0; i<6; i++) {
-      std_snprintf(hex_buf_cur, 3, "%02x ", (unsigned char)reply.data[i]);
-      hex_buf_cur += 3;
-    }
-    std_snprintf(hex_buf_cur, 5, "\n");
-    log_object_print(&sds011_log, LOG_INFO, hex_buf);
-
-    if (reply.command == SDS011_REPLY_MEASUREMENT) {
-      sds011_decode_measurement_reply(&reply, &measurement);
-      log_object_print(&sds011_log,
-		       LOG_INFO,
-		       OSTR("PM 2.5: %5.1f, PM 10: %5.1f"),
-		       measurement.pm2_5 / 10.0,
-		       measurement.pm10 / 10.0);
-    }
+  default:
+    return -EPROTO;
   }
+  reply->device_id = raw_reply.data[4] | raw_reply.data[5] << 8;
+  return 0;
+}
+
+int sds011_set_data_reporting_mode(struct sds011_device_t *device, int reporting_mode)
+{
+  char data[3] = {2, 1, reporting_mode};
+  return sds011_send_command(device, SDS011_COMMAND_OUTGOING, data, sizeof(data));
+}
+
+int sds011_query_data_reporting_mode(struct sds011_device_t *device)
+{
+  static char data[3] = {2, 0};
+  return sds011_send_command(device, SDS011_COMMAND_OUTGOING, data, sizeof(data));
+}
+
+int sds011_query_measurement(struct sds011_device_t *device)
+{
+  static char data[1] = {4};
+  return sds011_send_command(device, SDS011_COMMAND_OUTGOING, data, sizeof(data));
+}
+
+int sds011_set_device_id(struct sds011_device_t *device, sds011_device_id_t device_id)
+{
+  char data[13] = {5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		   device_id & 0xff,
+		   device_id & 0xff00 >> 8};
+  return sds011_send_command(device, SDS011_COMMAND_OUTGOING, data, sizeof(data));
+}
+
+int sds011_query_sleep(struct sds011_device_t *device)
+{
+  static char data[1] = {6};
+  return sds011_send_command(device, SDS011_COMMAND_OUTGOING, data, sizeof(data));
+}
+
+int sds011_set_sleep(struct sds011_device_t *device, int awake)
+{
+  char data[3] = {6, 1, awake};
+  return sds011_send_command(device, SDS011_COMMAND_OUTGOING, data, sizeof(data));
+}
+
+int sds011_query_working_period(struct sds011_device_t *device)
+{
+  static char data[2] = {8, 0};
+  return sds011_send_command(device, SDS011_COMMAND_OUTGOING, data, sizeof(data));
+}
+
+int sds011_set_working_period(struct sds011_device_t *device, uint8_t sleep_minutes)
+{
+  char data[3] = {8, 1, sleep_minutes};
+  return sds011_send_command(device, SDS011_COMMAND_OUTGOING, data, sizeof(data));
+}
+
+int sds011_query_firmware_version(struct sds011_device_t *device)
+{
+  static char data[1] = {7};
+  return sds011_send_command(device, SDS011_COMMAND_OUTGOING, data, sizeof(data));
+}
+
+void sds011_init_with_uart(struct sds011_device_t *device, struct uart_driver_t *uart)
+{
+  device->device_id = SDS011_DEVICE_ID_ANY;
+  device->chin = &(uart->chin);
+  device->chout = &(uart->chout);
+}
+
+void sds011_init_with_uart_soft(struct sds011_device_t *device, struct uart_soft_driver_t *uart)
+{
+  device->device_id = SDS011_DEVICE_ID_ANY;
+  device->chin = &(uart->chin);
+  device->chout = &(uart->chout);
 }
