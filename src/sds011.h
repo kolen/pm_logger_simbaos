@@ -1,5 +1,3 @@
-void* sds011_main(void* _unused);
-
 #define SDS011_DATA_REPORTING_ACTIVE 0
 #define SDS011_DATA_REPORTING_QUERY 1
 

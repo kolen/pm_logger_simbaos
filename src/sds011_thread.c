@@ -11,7 +11,7 @@ struct exti_driver_t uart_exti;
 char uart_receive_buffer[UART_RECEIVE_BUFFER_SIZE];
 struct log_object_t sds011_log;
 
-void* sds011_main(void* _unused)
+void* sds011_thread_main(void* _unused)
 {
   log_object_init(&sds011_log, "sds011", LOG_UPTO(INFO));
   log_object_print(&sds011_log, LOG_INFO, OSTR("Starting sds011 module"));
