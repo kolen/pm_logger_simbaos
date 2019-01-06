@@ -56,10 +56,11 @@ int sds011_read_raw(struct sds011_device_t *device, struct sds011_raw_command_re
   int i;
   for (i = 1; i < 7; i++) {
     checksum += command_buffer[i];
+    reply->data[i-1] = command_buffer[i];
   }
 
   if (checksum == command_buffer[7] && command_buffer[8] == SDS011_COMMAND_TAIL) {
-    memcpy(&command_buffer[1], &(reply->data), 6);
+    //memcpy(&command_buffer[1], &(reply->data), 6);
     reply->command = command_buffer[0];
     return TRUE;
   } else {
