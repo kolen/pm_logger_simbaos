@@ -169,9 +169,9 @@ int sds011_query_firmware_version(struct sds011_device_t *device)
 
 void sds011_init_with_uart(struct sds011_device_t *device, struct uart_driver_t *uart)
 {
-  device->device_id = SDS011_DEVICE_ID_ANY;
-  device->chin = &(uart->chin);
-  device->chout = &(uart->chout);
+  /* device->device_id = SDS011_DEVICE_ID_ANY; */
+  /* device->chin = &(uart->chin); */
+  /* device->chout = &(uart->chout); */
 }
 
 void sds011_init_with_uart_soft(struct sds011_device_t *device, struct uart_soft_driver_t *uart)

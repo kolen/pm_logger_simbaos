@@ -1,9 +1,7 @@
 // https://github.com/eerimoq/simba/commit/f6160d3ff947a3bef5a0b3878d80eef1b6a61eaa
 // Not in current version
 
-#ifdef exti_d1_dev
-#error exti_d1_dev already defined in your version
-#endif
+#ifndef exti_d1_dev
 
 #ifdef BOARD_NODEMCU
 #define exti_d1_dev exti_device[5]
@@ -31,4 +29,6 @@
 
 #if !defined(BOARD_NODEMCU) && !defined(BOARD_WEMOS_D1_MINI)
 #error Board not supported
+#endif
+
 #endif
