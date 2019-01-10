@@ -4,7 +4,8 @@ export PATH := $(PATH):/Users/kolen/.platformio/packages/toolchain-xtensa/bin/
 NAME = pm_sensor
 BOARD ?= nodemcu
 
-SRC += sds011.c sds011_thread.c
+INC += ../../libsds011/src
+SRC += ../../libsds011/src/sds011.c sds011_thread.c
 
 ifeq ($(BOARD),LINUX)
 CC = /usr/local/bin/gcc-8
