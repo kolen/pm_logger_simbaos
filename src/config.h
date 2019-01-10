@@ -1,2 +1,5 @@
-// DHT is backported from master branch
-#define CONFIG_DHT 0
+// TODO: these values are random, figure out what are they for
+#define CONFIG_NVM_EEPROM_SOFT 1
+#define CONFIG_NVM_EEPROM_SOFT_CHUNK_SIZE 4096
+#define CONFIG_NVM_EEPROM_SOFT_BLOCK_0_SIZE 4096
+#define CONFIG_NVM_EEPROM_SOFT_BLOCK_1_SIZE 4096
