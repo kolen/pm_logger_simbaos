@@ -1,7 +1,9 @@
 #include "simba.h"
 #include "sds011_thread.h"
+#include "dht_thread.h"
 
 static THRD_STACK(sds011_stack, 1024);
+//static THRD_STACK(dht_stack, 1024);
 
 struct log_object_t main_log;
 
@@ -18,6 +20,7 @@ int main()
     log_object_print(&main_log, LOG_INFO, OSTR("Starting SDS011 thread"));
 
     thrd_spawn(sds011_thread_main, NULL, 10, sds011_stack, sizeof(sds011_stack));
+    //thrd_spawn(dht_thread_main, NULL, 10, dht_stack, sizeof(dht_stack));
 
     log_object_print(&main_log, LOG_INFO, OSTR("Starting blinking"));
 

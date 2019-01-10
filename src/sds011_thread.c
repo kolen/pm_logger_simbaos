@@ -1,6 +1,7 @@
 #include "simba.h"
 #include "sds011.h"
 #include "boards_exti.h"
+#include "dht_thread.h"
 
 struct uart_soft_driver_t uart;
 struct exti_driver_t uart_exti;
@@ -15,6 +16,7 @@ void* sds011_thread_main(void* _unused)
 {
   log_object_init(&sds011_log, "sds011", LOG_UPTO(INFO));
   log_object_print(&sds011_log, LOG_INFO, OSTR("Starting sds011 module"));
+  rwlock_writer_take(&dht_lock);
 
   exti_module_init();
   uart_soft_init(&uart,
@@ -29,21 +31,16 @@ void* sds011_thread_main(void* _unused)
   sds011_init_with_uart_soft(&sds011, &uart);
   sds011_query_data_reporting_mode(&sds011);
   thrd_sleep(1);
-  sds011_query_data_reporting_mode(&sds011);
-  thrd_sleep(1);
+
+  sds011_query_measurement(&sds011);
 
   while(1) {
-    thrd_sleep(3);
-
-    sds011_query_measurement(&sds011);
-
-    thrd_sleep_ms(100);
     struct sds011_reply_t reply;
     int result;
     result = sds011_read_reply(&sds011, &reply);
 
-    if (!result) {
-      log_object_print(&sds011_log, LOG_INFO, OSTR("Error reading packet."));
+    if (result < 0) {
+      log_object_print(&sds011_log, LOG_INFO, OSTR("Error reading packet\n"));
       continue;
     }
 
@@ -62,9 +59,24 @@ void* sds011_thread_main(void* _unused)
     if (reply.type == sds011_reply_measurement) {
       log_object_print(&sds011_log,
 		       LOG_INFO,
-		       OSTR("PM 2.5: %5.1f, PM 10: %5.1f"),
-		       reply.measurement.pm2_5 / 10.0,
-		       reply.measurement.pm10 / 10.0);
+		       OSTR("PM 2.5: %d, PM 10: %d, device id: %d\n"),
+		       reply.measurement.pm2_5,
+		       reply.measurement.pm10,
+		       reply.device_id);
+      rwlock_writer_give(&dht_lock);
+      thrd_sleep(3);
+      rwlock_writer_take(&dht_lock);
+      sds011_query_measurement(&sds011);
+    } else if (reply.type == sds011_reply_data_reporting_mode) {
+      log_object_print(&sds011_log,
+		       LOG_INFO,
+		       OSTR("Data reporting mode: %d\n"),
+		       reply.reporting_mode);
+      if (reply.reporting_mode == SDS011_DATA_REPORTING_ACTIVE) {
+	log_object_print(&sds011_log, LOG_INFO, OSTR("Switching to query reporting\n"));
+	sds011_set_data_reporting_mode(&sds011, SDS011_DATA_REPORTING_QUERY);
+	sds011_query_data_reporting_mode(&sds011);
+      }
     }
   }
 }
