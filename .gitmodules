@@ -1,0 +1,3 @@
+[submodule "src/libsds011"]
+	path = src/libsds011
+	url = git@github.com:kolen/libsds011.git
