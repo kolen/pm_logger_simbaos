@@ -1,0 +1,12 @@
+[package]
+name = "pm_sensor_simba"
+version = "0.1.0"
+authors = ["kolen <incredible.angst@gmail.com>"]
+edition = "2018"
+description = "This package contains test code for pm_sensor_simba C application. Rust code here is not compiled to target device and is used only for automated tests."
+
+[dependencies]
+
+[build-dependencies]
+cc = "1.0"
+bindgen = "0.42.2"

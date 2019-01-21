@@ -2,3 +2,6 @@
 .pioenvs
 .piolibdeps
 build
+
+/target
+**/*.rs.bk
