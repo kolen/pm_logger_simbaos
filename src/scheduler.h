@@ -4,9 +4,19 @@
 #include "simba.h"
 
 struct scheduler_t {
-  time_t last_run;
+  struct sem_t *hourly_sem;
+  struct sem_t *minutely_sem;
+  int32_t last_known_time;
+
+  uint32_t hourly_hours_mask;
+  int32_t hourly_last_run;
+
+  int minutely_period;
+  int32_t minutely_last_run;
 };
 
 void scheduler_init(struct scheduler_t *self);
+void scheduler_set_hourly(struct scheduler_t *self, uint32_t hours_mask, struct sem_t *hourly_sem);
+void scheduler_tick(struct scheduler_t *self, int32_t current_time);
 
 #endif

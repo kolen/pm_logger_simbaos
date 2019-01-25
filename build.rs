@@ -27,6 +27,11 @@ fn main() {
     let bindings = bindgen::Builder::default()
         .header("src/scheduler.h")
         .whitelist_function("scheduler_init")
+        .whitelist_function("scheduler_set_hourly")
+        .whitelist_function("scheduler_set_minutely")
+        .whitelist_function("scheduler_tick")
+        .whitelist_function("sem_init")
+        .derive_default(true)
         .clang_args(
             build
                 .get_compiler()
