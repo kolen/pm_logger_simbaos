@@ -11,6 +11,11 @@ void scheduler_set_hourly(struct scheduler_t *self, uint32_t hours_mask, struct 
   self->hourly_sem = hourly_sem;
 }
 
+void scheduler_set_minutely(struct scheduler_t *self, int minutely_period, struct sem_t *minutely_sem) {
+  self->minutely_period = minutely_period;
+  self->minutely_sem = minutely_sem;
+}
+
 static int32_t scheduler_beginning_of_hour(int32_t time) {
   return time - (time % SECONDS_IN_HOUR);
 }

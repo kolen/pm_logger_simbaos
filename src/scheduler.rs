@@ -6,12 +6,12 @@ include!(concat!(env!("OUT_DIR"), "/scheduler_bindings.rs"));
 
 // Semaphore stub
 #[no_mangle]
-pub extern fn sem_give(sem: &mut sem_t) {
+pub extern "C" fn sem_give(sem: &mut sem_t) {
     sem.count += 1;
 }
 
 #[test]
-fn scheduler_test() {
+fn hourly_test() {
     let mut scheduler = scheduler_t::default();
     let mut sem = sem_t::default();
     unsafe {
@@ -42,5 +42,32 @@ fn scheduler_test() {
     unsafe {
         scheduler_tick(&mut scheduler, 1548379210 + (60 * 60 * 3));
     }
+    assert_eq!(sem.count, 2);
+}
+
+#[test]
+fn minutely_test() {
+    let mut scheduler = scheduler_t::default();
+    let mut sem = sem_t::default();
+    unsafe {
+        scheduler_init(&mut scheduler);
+        sem_init(&mut sem, 0, 1);
+        scheduler_set_minutely(&mut scheduler, 5, &mut sem);
+    }
+
+    assert_eq!(sem.count, 0);
+    let time_base = 1514754000;
+    unsafe {
+        scheduler_tick(&mut scheduler, time_base + 60 * 3);
+    }
+    assert_eq!(sem.count, 0);
+
+    unsafe { scheduler_tick(&mut scheduler, time_base + 60 * 5 + 3) };
+    assert_eq!(sem.count, 1);
+    unsafe { scheduler_tick(&mut scheduler, time_base + 60 * 5 + 59) };
+    assert_eq!(sem.count, 1);
+    unsafe { scheduler_tick(&mut scheduler, time_base + 60 * 20 + 4) };
+    assert_eq!(sem.count, 2);
+    unsafe { scheduler_tick(&mut scheduler, time_base + 60 * 15 + 4) };
     assert_eq!(sem.count, 2);
 }
