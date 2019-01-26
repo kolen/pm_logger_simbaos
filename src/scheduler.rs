@@ -18,6 +18,9 @@ fn scheduler_test() {
         scheduler_init(&mut scheduler);
         sem_init(&mut sem, 0, 1);
         scheduler_set_hourly(&mut scheduler, 0b0100_1111_1111_1111_0000_0000, &mut sem);
+    }
+
+    unsafe {
         scheduler_tick(&mut scheduler, 1);
         scheduler_tick(&mut scheduler, 3);
     }
