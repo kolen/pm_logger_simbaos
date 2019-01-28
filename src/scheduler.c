@@ -6,14 +6,16 @@ void scheduler_init(struct scheduler_t *self) {
   memset(self, sizeof(self), 0);
 }
 
-void scheduler_set_hourly(struct scheduler_t *self, uint32_t hours_mask, struct sem_t *hourly_sem) {
+void scheduler_set_hourly(struct scheduler_t *self, uint32_t hours_mask, void (*callback)(void*), void *callback_arg) {
   self->hourly_hours_mask = hours_mask;
-  self->hourly_sem = hourly_sem;
+  self->hourly_callback = callback;
+  self->hourly_callback_arg = callback_arg;
 }
 
-void scheduler_set_minutely(struct scheduler_t *self, int minutely_period, struct sem_t *minutely_sem) {
+void scheduler_set_minutely(struct scheduler_t *self, int minutely_period, void (*callback)(void*), void *callback_arg) {
   self->minutely_period = minutely_period;
-  self->minutely_sem = minutely_sem;
+  self->minutely_callback = callback;
+  self->minutely_callback_arg = callback_arg;
 }
 
 static int32_t scheduler_beginning_of_hour(int32_t time) {
@@ -44,15 +46,16 @@ void scheduler_tick(struct scheduler_t *self, int32_t current_time) {
   if (!(self->last_known_time < current_time)) {
     return; // Detected "backwards clock", might happen when correcting it
   }
+  self->last_known_time = current_time;
 
   int32_t current_hour = scheduler_beginning_of_hour(current_time);
   int current_hour_number = scheduler_hour_number(current_hour);
 
   if (current_hour > self->hourly_last_run &&
       scheduler_should_run_in_hour(current_hour_number, self->hourly_hours_mask) &&
-      self->hourly_sem) {
+      self->hourly_callback) {
     self->hourly_last_run = current_hour;
-    sem_give(self->hourly_sem, 1);
+    self->hourly_callback(self->hourly_callback_arg);
   }
 
   int32_t current_minute = scheduler_beginning_of_minute(current_time);
@@ -60,8 +63,8 @@ void scheduler_tick(struct scheduler_t *self, int32_t current_time) {
 
   if (current_minute > self->minutely_last_run &&
       scheduler_should_run_in_minute(current_minute_number, self->minutely_period) &&
-      self->minutely_sem) {
+      self->minutely_callback) {
     self->minutely_last_run = current_minute;
-    sem_give(self->minutely_sem, 1);
+    self->minutely_callback(self->minutely_callback_arg);
   }
 }
