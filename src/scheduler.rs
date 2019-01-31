@@ -36,17 +36,11 @@ impl<'a> Callback<'a> {
     }
 
     pub unsafe extern "C" fn external_callback(callback_arg: *mut c_void) {
-        println!("callback arg: {:?}", callback_arg);
         let cb: &mut Callback = &mut *(callback_arg as *mut Callback);
-        println!("Magic: {}", cb.magic);
         (cb.callback)();
     }
 
     pub fn to_external_callback_param(self: &mut Self) -> *mut c_void {
-        println!(
-            "setting callback: {:?}",
-            (self as *mut Callback as *mut c_void)
-        );
         self as *mut Callback as *mut c_void
     }
 }
