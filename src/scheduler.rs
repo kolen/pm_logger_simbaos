@@ -24,20 +24,20 @@ pub struct Scheduler<'a> {
 
 struct Callback<'a> {
     magic: String,
-    callback: Box<FnMut() + 'a>,
+    callback: Box<FnMut(i32) + 'a>,
 }
 
 impl<'a> Callback<'a> {
-    pub fn new(callback: impl FnMut() + 'a) -> Self {
+    pub fn new(callback: impl FnMut(i32) + 'a) -> Self {
         Callback {
             callback: Box::new(callback),
             magic: String::from("Yieee"),
         }
     }
 
-    pub unsafe extern "C" fn external_callback(callback_arg: *mut c_void) {
+    pub unsafe extern "C" fn external_callback(callback_arg: *mut c_void, time_period_start: i32) {
         let cb: &mut Callback = &mut *(callback_arg as *mut Callback);
-        (cb.callback)();
+        (cb.callback)(time_period_start);
     }
 
     pub fn to_external_callback_param(self: &mut Self) -> *mut c_void {
@@ -56,7 +56,7 @@ impl<'a> Scheduler<'a> {
         }
     }
 
-    pub fn set_hourly(self: &mut Self, hourly_mask: u32, callback: impl FnMut() + 'a) {
+    pub fn set_hourly(self: &mut Self, hourly_mask: u32, callback: impl FnMut(i32) + 'a) {
         assert!(hourly_mask <= 0b1111_1111_1111_1111_1111_1111);
         let cb = Callback::new(callback);
         self.hourly_callback = Some(cb);
@@ -73,7 +73,7 @@ impl<'a> Scheduler<'a> {
         }
     }
 
-    pub fn set_minutely(self: &mut Self, period: i32, callback: impl FnMut() + 'a) {
+    pub fn set_minutely(self: &mut Self, period: i32, callback: impl FnMut(i32) + 'a) {
         assert!(period > 0);
         assert!(period < 60);
         let cb = Callback::new(callback);
@@ -118,9 +118,9 @@ impl CallbackChecker {
         *self.count.borrow() - before
     }
 
-    pub fn callback(&mut self) -> impl FnMut() {
+    pub fn callback(&mut self) -> impl FnMut(i32) {
         let count2 = Rc::clone(&self.count);
-        move || *count2.borrow_mut() += 1
+        move |_period_start| *count2.borrow_mut() += 1
     }
 }
 
