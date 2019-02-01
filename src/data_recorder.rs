@@ -1,31 +1,76 @@
-use std::time::{Duration, SystemTime};
+#![allow(dead_code)]
+#![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
 
-struct DataRecorder<T> {
-    data: Vec<T>,
-    period: Duration,
-    num_samples: u32,
-    last_time: Option<SystemTime>,
+mod internal {
+    include!(concat!(env!("OUT_DIR"), "/data_recorder_bindings.rs"));
 }
 
-impl<T> DataRecorder<T> {
-    pub fn new(period: Duration, num_samples: u32) -> Self {
+use std::default::Default;
+use std::mem;
+use std::os::raw::c_void;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+struct DataRecorder<T: Default> {
+    data_recorder: internal::data_recorder_t,
+    pub buffer: Vec<T>,
+}
+
+impl<T> DataRecorder<T>
+where
+    T: Default + Clone,
+{
+    pub fn new(num_samples: usize, sampling_period: Duration) -> Self {
+        let mut data_recorder = internal::data_recorder_t::default();
+        let mut buffer = vec![Default::default(); num_samples];
+
+        unsafe {
+            internal::data_recorder_init(
+                &mut data_recorder,
+                &mut buffer[..] as *mut _ as *mut c_void,
+                mem::size_of::<T>(),
+                num_samples,
+                sampling_period.as_secs() as i32,
+            );
+        }
+
         DataRecorder {
-            data: Vec::new(),
-            period: period,
-            num_samples: num_samples,
-            last_time: None,
+            data_recorder: data_recorder,
+            buffer: buffer,
         }
     }
 
-    pub fn add_measurement(&mut self, time: SystemTime, measurement: T) {
-        let distance_from_previous: Duration =
-            self.last_time.map_or(Duration::from_secs(0), |last_time| {
-                time.duration_since(last_time).unwrap()
-            });
+    pub fn add_sample(&mut self, sample_time: SystemTime, sample: &T) -> Result<(), i32> {
+        let result;
+        unsafe {
+            result = internal::data_recorder_add_sample(
+                &mut self.data_recorder,
+                sample_time.duration_since(UNIX_EPOCH).unwrap().as_secs() as i32,
+                sample as *const T as *const c_void,
+            );
+        }
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(result)
+        }
+    }
+}
 
-        assert_eq!(0, distance_from_previous.as_secs() % self.period.as_secs());
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        self.data.push(measurement);
-        self.last_time = Some(time);
+    #[test]
+    fn test_basics() {
+        let mut data_recorder = DataRecorder::new(5, Duration::from_secs(15));
+        let base_time = SystemTime::now();
+        for i in 1..=15 {
+            data_recorder
+                .add_sample(base_time + Duration::from_secs(15 * i), &(i as f64 * 10.0))
+                .unwrap();
+        }
+        assert_eq!(vec![150., 140., 130., 120., 110.], data_recorder.buffer);
     }
 }
